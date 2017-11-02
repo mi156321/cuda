@@ -25,10 +25,11 @@
  * OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include <stdio.h>
+#include "timer.h"
 
 __global__ void staticReverse(int *d, int n)
 {
-  __shared__ int s[64];
+  __shared__ int s[10000];
   int t = threadIdx.x;
   int tr = n-t-1;
   s[t] = d[t];
@@ -48,14 +49,20 @@ __global__ void dynamicReverse(int *d, int n)
 
 int main(void)
 {
-  const int n = 64;
+  const int n = 10000;
   int a[n], r[n], d[n];
+  GpuTimer timer;
+  timer.Start();
   
   for (int i = 0; i < n; i++) {
     a[i] = i;
     r[i] = n-i-1;
     d[i] = 0;
   }
+  timer.Stop();
+  printf("\n");
+  printf("%f msecs. using host  \n", timer.Elapsed());
+
 
   int *d_d;
   cudaMalloc(&d_d, n * sizeof(int)); 
@@ -64,13 +71,20 @@ int main(void)
   cudaMemcpy(d_d, a, n*sizeof(int), cudaMemcpyHostToDevice);
   staticReverse<<<1,n>>>(d_d, n);
   cudaMemcpy(d, d_d, n*sizeof(int), cudaMemcpyDeviceToHost);
+  timer.Stop();
   for (int i = 0; i < n; i++) 
     if (d[i] != r[i]) printf("Error: d[%d]!=r[%d] (%d, %d)\n", i, i, d[i], r[i]);
-  
+    printf("\n");
+    printf("%f msecs. using shared-memory \n", timer.Elapsed());
+ 
   // run dynamic shared memory version
   cudaMemcpy(d_d, a, n*sizeof(int), cudaMemcpyHostToDevice);
   dynamicReverse<<<1,n,n*sizeof(int)>>>(d_d, n);
   cudaMemcpy(d, d_d, n * sizeof(int), cudaMemcpyDeviceToHost);
+
+    printf("\n");
+    printf("%f msecs. using dynamic shared-memory \n", timer.Elapsed());
+
   for (int i = 0; i < n; i++) 
     if (d[i] != r[i]) printf("Error: d[%d]!=r[%d] (%d, %d)\n", i, i, d[i], r[i]);
 }
